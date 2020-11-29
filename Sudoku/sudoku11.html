@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+        <meta charset="utf-8">
+        <meta content="width=device-width" name="viewport">
+        <!-- {{{ Random -->
+        <script type="text/javascript" id="libs">
+const neighboors = [];
+const digits = Array(9).fill(0).map((_,i)=>i+1);
+for(let i=0; i<81; i++) {
+    const y = Math.floor(i/9);
+    const x = i%9;
+    const line = digits.map((_,j)=>y*9+j);
+    const col = digits.map((_,j)=>j*9+x);
+    const zone = [];
+    const zx = x - (x%3);
+    const zy = y - (y%3);
+    for(let dy=0; dy<3; dy++) {
+        for(let dx=0; dx<3; dx++) {
+            zone.push((zy+dy)*9+(zx+dx));
+        }
+    }
+    const all = new Set(line.concat(col).concat(zone));
+    all.delete(i);
+    neighboors.push([...all].sort((a,b)=>a-b));
+}
+
+
+function xmur3(str) {
+    for(var i = 0, h = 1779033703 ^ str.length; i < str.length; i++)
+        h = Math.imul(h ^ str.charCodeAt(i), 3432918353),
+        h = h << 13 | h >>> 19;
+    return function() {
+        h = Math.imul(h ^ h >>> 16, 2246822507);
+        h = Math.imul(h ^ h >>> 13, 3266489909);
+        return (h ^= h >>> 16) >>> 0;
+    }
+}
+function sfc32(a, b, c, d) {
+    return function() {
+      a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0; 
+      var t = (a + b) | 0;
+      a = b ^ b >>> 9;
+      b = c + (c << 3) | 0;
+      c = (c << 21 | c >>> 11);
+      d = d + 1 | 0;
+      t = t + d | 0;
+      c = c + t | 0;
+      return (t >>> 0) / 4294967296;
+    }
+}
+function makerandom(seed) {
+    const _seed = xmur3(seed || Math.random().toString(16).slice(2));
+    return sfc32(_seed(), _seed(), _seed(), _seed());
+}
+        </script>
+        <!-- }}} Random -->
+        <!-- {{{ Main -->
+        <script type="text/javascript">window.addEventListener('load',(()=>{
+
+function generate(seed) {
+    const worker = new Worker("data:text/javascript;base64,"+btoa(
+        document.querySelector("#libs").textContent+"\n\n"+
+        document.querySelector("script[type='text/worker']").textContent
+        ));
+    worker.onmessage = function(event) {
+        const msg = event.data;
+        if(msg.type == "BUILT") {
+            const m = msg.m;
+            announce("Complexification &hellip;")
+            worker.postMessage({type:"SPARSE",
+                m:m, seed:seed});
+        } else if(msg.type == "SPARSED") {
+            const {m,solution} = msg;
+            announce();
+            storeandplay(seed, m, solution);
+        }
+    };
+    worker.postMessage({type:"BUILD", seed:seed});
+}
+function announce(html) {
+    document.querySelector(".ground thead").style.display = html?"":"none";
+    document.querySelector(".ground thead h2").innerHTML = html;
+}
+
+function lsAvail() {
+    const test = 'local_storage_test';
+    try {
+        localStorage.setItem(test, test);
+        localStorage.removeItem(test);
+        return true;
+    } catch(e) {
+        return false;
+    }
+}
+
+function storeandplay(seed, board, solution) {
+    if(lsAvail()) {
+        const key = `sudoku_${seed}`;
+        localStorage.setItem(key, JSON.stringify({
+            board, solution
+        }));
+        console.log("Stored board", board, "for seed", seed);
+    }
+    doplay(seed, board, solution);
+}
+function doplay(seed, board, solution, state) {
+    console.log("Playing board", board, "with solution", solution);
+    const table = document.querySelector(".ground");
+    const three = Array(3).fill(0).map((_,i)=>i);
+    board.forEach((cell,position)=>{
+        const x = position%9;
+        const y = Math.floor(position/9);
+        const td = table.querySelector("tbody").rows[y].cells[x];
+        td.addEventListener("click", function(event) {
+            changeSelection(td, x, y, table);
+        });
+        const span = td.appendChild(document.createElement("span"));
+        span.className = cell?"fixed":"figure";
+        span.textContent = cell || "";
+        const table2 = td.appendChild(document.createElement("table"));
+        table2.style.display = "none";
+        table2.className = "candidates";
+        three.forEach(j=>{
+            const tr2 = table2.appendChild(document.createElement("tr"));
+            three.forEach(i=>{
+                const td2 = tr2.appendChild(document.createElement("td"));
+                td2.textContent = 1+j*3+i;
+            });
+        });
+    });
+
+    document.querySelector(".controls button.auto")
+            .addEventListener("click", function(event) {
+        // Click on Auto
+        const candidates = new Set(Array(9).fill(0).map((_,i)=>i+1));
+        let x0,y0,zone0;
+        [].slice.call(table.querySelector("tbody").rows)
+                .forEach((row,y)=>{
+            [].slice.call(row.cells).forEach((cell,x)=>{
+                if((" "+cell.className+" ").match(" selected ")) {
+                    x0 = x; y0 = y; 
+                    zone0 = Math.floor(x/3)+3*Math.floor(y/3);
+                }
+            });
+        });
+        [].slice.call(table.querySelector("tbody").rows)
+                .forEach((row,y)=>{
+            [].slice.call(row.cells).forEach((cell,x)=>{
+                const t = cell.querySelector("span").textContent;
+                if(t && (+t)) {
+                    const zone = Math.floor(x/3)+3*Math.floor(y/3);
+                    if((x == x0) || (y == y0) || (zone == zone0)) {
+                        candidates.delete(+t);
+                    }
+                }
+            });
+        });
+        const selected = document.querySelector(".selected");
+        if(selected) {
+            const minis = [].slice.call(selected.querySelectorAll("td"));
+            minis.forEach(mini=>{mini.textContent = ""});
+            [...candidates].forEach(digit=>{
+                minis[digit-1].textContent = digit;
+            });
+            const s = document.querySelector(".selected span");
+            if(!(` ${s.className} `.match(/ fixed /))) {
+                // Do nothing if figure is fixed
+                const t = document.querySelector(".selected table");
+                t.style.display = "";
+                s.style.display = "none";
+                s.textContent = "";
+                showErrors(table);
+            }
+        }
+        autosave(seed, board, solution, table);
+    });
+    [].slice.call(document.querySelectorAll(".figurebuttons button"))
+            .forEach(button=>{
+        button.addEventListener("click", function(event) {
+            // Click on Figure button
+            const digit = +(button.textContent);
+            const ismini = document.querySelector(".controls input.mini"
+                    ).checked;
+            const selected = document.querySelector(".selected");
+            if(!selected) return;
+
+            const s = document.querySelector(".selected span");
+            const t = document.querySelector(".selected table");
+            if(` ${s.className} `.match(/ fixed /)) {
+                // Do nothing, figure is fixed
+            } else if(ismini) {
+                t.style.display = ""; // show minis
+                s.style.display = "none"; // hide figure
+                s.textContent = "";
+                const td = [].slice.call(t.querySelectorAll("td"))[digit-1];
+                if(td.firstChild) {
+                    td.removeChild(td.firstChild)
+                } else {
+                    td.textContent = digit;
+                }
+            } else {
+                s.style.display = ""; // show figure
+                t.style.display = "none"; // hide minis
+                s.textContent = digit;
+                const td = s.parentNode;
+                td.click();
+                showErrors(table);
+            }
+            autosave(seed, board, solution, table);
+        });
+    });
+    document.querySelector(".controls button.getsolution")
+            .addEventListener("click", function(event) {
+        const pre = document.body.appendChild(document.createElement(
+                "pre"));
+        pre.textContent = solution.map((digit,n)=>((""+digit
+                )+((8 == (n%9))?"\n":""))).join("");
+        pre.onclick = function(){pre.parentNode.removeChild(pre);}
+    });
+    document.querySelector(".controls button.wipeall")
+            .addEventListener("click", function(event) {
+        if(confirm("Wipe localStorage ?")) {
+            if(lsAvail()) {
+                localStorage.clear();
+            }
+            document.location.reload();
+        }
+    });
+    if(state) {
+        console.log("STATE", state);
+        [].slice.call(table.querySelector("tbody").rows).forEach((row,y)=>{
+            [].slice.call(row.cells).forEach((cell,x)=>{
+                const {b,m1,m2} = state[`${x},${y}`];
+                const s = cell.querySelector("span.figure");
+                const t = cell.querySelector("table.candidates");
+                if(b) {
+                    [].slice.call(t.querySelectorAll("td")).forEach((td,i)=>{
+                        td.textContent = (m2.indexOf(i+1) != -1)?(i+1):"";
+                    });
+                    t.style.display = "";
+                    if(s) { s.style.display = "none"; }
+                } else {
+                    if(s) {
+                        if(m1) {
+                            s.textContent = m1;
+                        }
+                        s.style.display = "";
+                    }
+                    t.style.display = "none";
+                }
+            });
+        });
+    }
+}
+function showErrors(table) {
+    const tds = [];
+    const model = [].slice.call(table.querySelector("tbody").rows).map(tr=>
+        [].slice.call(tr.cells).map(td=>{
+            const t = td.querySelector("span").textContent;
+            const value = +(t.trim() || "0")
+            tds.push(td);
+            return value;
+        })
+    ).reduce((a,b)=>a.concat(b),[]);
+    model.forEach((value, position)=>{
+        const td = tds[position];
+        classed(td, "error", false);
+        if(value) {
+            const s = new Set(neighboors[position].map(i=>model[i]));
+            classed(td, "error", s.has(value));
+        }
+    });
+}
+function autosave(seed, board, solution, table) {
+    if(!lsAvail()) return;
+    const state = {};
+    [].slice.call(table.querySelector("tbody").rows).forEach((row,y)=>{
+        [].slice.call(row.cells).forEach((cell,x)=>{
+            const s = cell.querySelector("span.figure");
+            const t = cell.querySelector("table.candidates");
+            const m1 = s && (+(s.textContent)) || 0;
+            const m2 = [].slice.call(t.querySelectorAll("td")).map(
+                    td=>+td.textContent).filter(n=>n);
+            const b = t.style.display != "none";
+            state[`${x},${y}`] = { b, m1, m2 };
+        });
+    });
+    const key = `sudoku_${seed}`;
+    localStorage.setItem(key, JSON.stringify({
+        board, solution, state
+    }));
+}
+
+function classed(ele, classname, enabled) {
+    const c = " "+ele.className+" ";
+    const pattern = " "+(classname.trim())+" ";
+    if(enabled) {
+        ele.className = (c+pattern).trim();
+    } else {
+        ele.className = c.replace(pattern, "").trim();
+    }
+}
+function changeSelection(td, x0, y0, table) {
+    [].slice.call(table.querySelectorAll("td")).forEach(td=>{
+        classed(td, "selection", 0);
+        classed(td, "selected", 0);
+        classed(td, "related", 0);
+    });
+    const existing = td.querySelector("span").textContent;
+    const related = {x:new Set(), y:new Set(), zone:new Set()};
+    [].slice.call(table.querySelector("tbody").rows).forEach((tr,y)=>{
+        [].slice.call(tr.cells).forEach((td,x)=>{
+            const here = td.querySelector("span").textContent;
+            if(existing && (here == existing)) {
+                related.x.add(x);
+                related.y.add(y);
+                const zone = Math.floor(x/3)+3*Math.floor(y/3);
+                related.zone.add(zone);
+            }
+        });
+    });
+    const zone0 = Math.floor(x0/3)+3*Math.floor(y0/3);
+    [].slice.call(table.querySelector("tbody").rows).forEach((tr,y)=>{
+        [].slice.call(tr.cells).forEach((td,x)=>{
+            const zone = Math.floor(x/3)+3*Math.floor(y/3);
+            classed(td, "related", related.x.has(x) || related.y.has(y) 
+                    || related.zone.has(zone));
+            classed(td, "selection", (x==x0) || (y==y0) || (zone == zone0));
+            classed(td, "selected", (x==x0) && (y==y0));
+        });
+    });
+}
+
+if(location.search.match(/\?seed=/)) {
+    const seed = location.search.slice(6);
+    let retrieved = false;
+    if(lsAvail()) {
+        const key = `sudoku_${seed}`;
+        const v = localStorage.getItem(key);
+        if(v) {
+            const {board, solution, state} = JSON.parse(v);
+            retrieved = true;
+            announce();
+            console.log("Retrieved board", board, "for seed", seed);
+            doplay(seed, board, solution, state);
+        }
+    }
+    if(!retrieved) {
+        announce("Generation &hellip;")
+        generate(seed);
+    }
+} else {
+    const day = new Date().toISOString().split("T")[0].replace(/-/g,'');
+    document.location = document.location+"?seed="+day;
+}
+
+        }))</script>
+        <!-- }}} Main -->
+        <!-- {{{ Worker -->
+        <script type="text/worker" id="generatesudoku">
+// 1. Positions that can be arbitratily filled without constraint
+const independents = [0,1,2].map(i=>{
+    const result = [];
+    for(let y=0; y<3; y++) {   
+        for(let x=0; x<3; x++) {   
+            result.push((y+3*i)*9+(i*3+x));
+        }
+    }
+    return result;
+});
+
+// 3. Build a map
+function dobuild(m, callback) {
+    let mustcontinue = true;
+    function keepbuilding() {
+        if(!mustcontinue) return;
+        const candidates = [];
+        m.forEach((value,position)=>{
+            if(!value) {
+                // cell has 0 at position
+                const taken = new Set(neighboors[position].map(n=>m[n]));
+                taken.delete(0);
+                const available = digits.filter(x=>!taken.has(x));
+                candidates.push({position:position,values:available});
+            }
+        });
+        if(candidates.length) {
+            candidates.sort((a,b)=>a.values.length-b.values.length);
+            const {position,values} = candidates[0];
+            values.forEach(value=>{
+                m[position] = value;
+                if(isValid(m)) {
+                    keepbuilding();
+                }
+            });
+            m[position] = 0;
+        } else {
+            mustcontinue = callback(m);
+        }
+    }
+    return keepbuilding();
+}
+function isValid(m) {
+    for(let i=0; i<81; i++) {
+        const cell = m[i];
+        const visible = new Set(neighboors[i].map(n=>m[n]));
+        visible.delete(0);
+        if(visible.has(cell)) {
+            return false;
+        }
+    }
+    return true;
+}
+function shuffle(l, random) {
+    const remaining = l.slice();
+    const result = [];
+    l.forEach((_,i)=>{
+        const n = Math.floor(random()*remaining.length);
+        result.push(remaining.splice(n,1)[0]);
+    });
+    return result;
+}
+function dosparse(m, r) {
+    const filled = [];
+    m.forEach((value, position)=>{
+        if(value) {
+            filled.push(position);
+        }
+    });
+    const order = shuffle(filled,r);
+    order.forEach(position=>{
+        const current = m[position];
+        m[position] = 0;
+        if(!hasOneSingleSolution(m)) {
+            m[position] = current;
+        }
+    });
+    return m;
+}
+function hasOneSingleSolution(m) {
+    const solutions = [];
+    dobuild(m, function(sol) {
+        solutions.push(sol);
+        return (solutions.length < 2);
+    });
+    return 1 == solutions.length;
+}
+function newboard(seed, callback) {
+    const r = makerandom(seed);
+    const m = Array(81).fill(0);
+    
+    independents.forEach(independent=>{
+        const l = shuffle(digits, r);
+        independent.forEach((pos,i)=>{
+            const value = l[i];
+            m[pos] = value;
+        });
+    });
+
+    dobuild(m, callback);
+}
+onmessage = function(event) {
+    const msg = event && event.data;
+    if("BUILD" == msg.type) {
+        const {seed} = msg;
+        console.log("Building with seed", seed);
+        newboard(seed, function(sol) {
+            postMessage({type:"BUILT", m:sol});
+            return false;
+        });
+    } else if("SPARSE" == msg.type) {
+        const {m,seed} = msg;
+        const r = makerandom(seed);
+        console.log("Sparsing solution", m, "with seed", seed);
+        const sparsed = dosparse(m.slice(), r);
+        postMessage({type:"SPARSED", m:sparsed, solution:m});
+    }
+}
+        </script>
+        <!-- }}} Worker -->
+        <!-- {{{ Style -->
+        <style type="text/css">
+html,body { 
+    height: 100%; 
+    margin: 0px;
+    padding: 0px;
+    font-family: Verdana, Arial, sans-serif;
+}
+.ground {
+    width:  85vmin;
+    height: 85vmin;
+    table-layout: fixed;
+}
+.ground tbody td {
+    font-size: 5vmin;
+    line-height: 0;
+    width: 11%;
+    height: 11%;
+    text-align: center;
+    cursor:pointer;
+}
+.ground td:nth-child(3n) {
+    border-right: 2px solid black;
+}
+.ground tr:nth-child(3n) td {
+    border-bottom: 2px solid black;
+}
+.related   { background-color: #F0F0FF; }
+.selection { background-color: #F0F0F0; }
+.selected  { background-color: #D0D0D0; }
+.error { color: red; }
+.controls button {
+    font-size: 3vmin;
+    font-size: max(3vmin, 16px);
+    min-width: 9vmin;
+    min-width: max(9vmin, 42px);
+}
+.candidates {
+    width: 100%;
+    height: 100%;
+}
+.candidates td {
+    font-size: 3vmin !important;
+    color: #888;
+    border: 0 !important;
+}
+        </style>
+        <!-- }}} Style -->
+    </head>
+    <body>
+        <table class="ground" border="1">
+            <thead id="status"><tr><td colspan="9">
+                <h2>Initialisation &hellip;</h2>
+            </td></tr></thead>
+            <tbody>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+                <tr><td></td><td></td><td></td><td></td><td></td>
+                    <td></td><td></td><td></td><td></td></tr>
+            </tbody>
+            <tfoot><tr><td colspan="9">
+                <nav class="controls"><section class="figurebuttons"
+                    ><button>1</button><button>2</button><button>3</button
+                    ><button>4</button><button>5</button><button>6</button
+                    ><button>7</button><button>8</button><button>9</button
+                    ></section><section
+                    ><label>Mini <input type="checkbox" class="mini"/></label
+                    ><button class="auto">Auto</button
+                    ><button disabled>Auto-all</button
+                    ><button class="getsolution">Solution</button
+                    ><button class="wipeall">Reset</button
+                    ></section
+                ></nav>
+            </td></tr></tfoot>
+        </table>
+    </body>
+</html>
+<!-- vim: set ts=4 sw=4 sts=4 expandtab foldmethod=marker : -->
