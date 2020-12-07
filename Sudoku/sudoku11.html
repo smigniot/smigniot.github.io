@@ -56,6 +56,213 @@ function makerandom(seed) {
 }
         </script>
         <!-- }}} Random -->
+        <!-- {{{ Confetti lib -->
+        <script type="text/javascript">
+const confetti = {
+	maxCount: 150, speed: 2, frameInterval: 15, alpha: 1.0,
+	gradient: false, start: null, stop: null, toggle: null,
+	pause: null, resume: null, togglePause: null, remove: null,
+	isPaused: null, isRunning: null,
+};
+(function() {
+	confetti.start = startConfetti;
+	confetti.stop = stopConfetti;
+	confetti.toggle = toggleConfetti;
+	confetti.pause = pauseConfetti;
+	confetti.resume = resumeConfetti;
+	confetti.togglePause = toggleConfettiPause;
+	confetti.isPaused = isConfettiPaused;
+	confetti.remove = removeConfetti;
+	confetti.isRunning = isConfettiRunning;
+	var supportsAnimationFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame;
+	var colors = ["rgba(30,144,255,", "rgba(107,142,35,", "rgba(255,215,0,", "rgba(255,192,203,", "rgba(106,90,205,", "rgba(173,216,230,", "rgba(238,130,238,", "rgba(152,251,152,", "rgba(70,130,180,", "rgba(244,164,96,", "rgba(210,105,30,", "rgba(220,20,60,"];
+	var streamingConfetti = false;
+	var animationTimer = null;
+	var pause = false;
+	var lastFrameTime = Date.now();
+	var particles = [];
+	var waveAngle = 0;
+	var context = null;
+
+	function resetParticle(particle, width, height) {
+		particle.color = colors[(Math.random() * colors.length) | 0] + (confetti.alpha + ")");
+		particle.color2 = colors[(Math.random() * colors.length) | 0] + (confetti.alpha + ")");
+		particle.x = Math.random() * width;
+		particle.y = Math.random() * height - height;
+		particle.diameter = Math.random() * 10 + 5;
+		particle.tilt = Math.random() * 10 - 10;
+		particle.tiltAngleIncrement = Math.random() * 0.07 + 0.05;
+		particle.tiltAngle = Math.random() * Math.PI;
+		return particle;
+	}
+
+	function toggleConfettiPause() {
+		if (pause)
+			resumeConfetti();
+		else
+			pauseConfetti();
+	}
+
+	function isConfettiPaused() {
+		return pause;
+	}
+
+	function pauseConfetti() {
+		pause = true;
+	}
+
+	function resumeConfetti() {
+		pause = false;
+		runAnimation();
+	}
+
+	function runAnimation() {
+		if (pause)
+			return;
+		else if (particles.length === 0) {
+			context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+			animationTimer = null;
+		} else {
+			var now = Date.now();
+			var delta = now - lastFrameTime;
+			if (!supportsAnimationFrame || delta > confetti.frameInterval) {
+				context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+				updateParticles();
+				drawParticles(context);
+				lastFrameTime = now - (delta % confetti.frameInterval);
+			}
+			animationTimer = requestAnimationFrame(runAnimation);
+		}
+	}
+
+	function startConfetti(timeout, min, max) {
+		var width = window.innerWidth;
+		var height = window.innerHeight;
+		window.requestAnimationFrame = (function() {
+			return window.requestAnimationFrame ||
+				window.webkitRequestAnimationFrame ||
+				window.mozRequestAnimationFrame ||
+				window.oRequestAnimationFrame ||
+				window.msRequestAnimationFrame ||
+				function (callback) {
+					return window.setTimeout(callback, confetti.frameInterval);
+				};
+		})();
+		var canvas = document.getElementById("confetti-canvas");
+		if (canvas === null) {
+			canvas = document.createElement("canvas");
+			canvas.setAttribute("id", "confetti-canvas");
+			canvas.setAttribute("style", "display:block;z-index:999999;pointer-events:none;position:fixed;top:0");
+			document.body.prepend(canvas);
+			canvas.width = width;
+			canvas.height = height;
+			window.addEventListener("resize", function() {
+				canvas.width = window.innerWidth;
+				canvas.height = window.innerHeight;
+			}, true);
+			context = canvas.getContext("2d");
+		} else if (context === null)
+			context = canvas.getContext("2d");
+		var count = confetti.maxCount;
+		if (min) {
+			if (max) {
+				if (min == max)
+					count = particles.length + max;
+				else {
+					if (min > max) {
+						var temp = min;
+						min = max;
+						max = temp;
+					}
+					count = particles.length + ((Math.random() * (max - min) + min) | 0);
+				}
+			} else
+				count = particles.length + min;
+		} else if (max)
+			count = particles.length + max;
+		while (particles.length < count)
+			particles.push(resetParticle({}, width, height));
+		streamingConfetti = true;
+		pause = false;
+		runAnimation();
+		if (timeout) {
+			window.setTimeout(stopConfetti, timeout);
+		}
+	}
+
+	function stopConfetti() {
+		streamingConfetti = false;
+	}
+
+	function removeConfetti() {
+		stop();
+		pause = false;
+		particles = [];
+	}
+
+	function toggleConfetti() {
+		if (streamingConfetti)
+			stopConfetti();
+		else
+			startConfetti();
+	}
+	
+	function isConfettiRunning() {
+		return streamingConfetti;
+	}
+
+	function drawParticles(context) {
+		var particle;
+		var x, y, x2, y2;
+		for (var i = 0; i < particles.length; i++) {
+			particle = particles[i];
+			context.beginPath();
+			context.lineWidth = particle.diameter;
+			x2 = particle.x + particle.tilt;
+			x = x2 + particle.diameter / 2;
+			y2 = particle.y + particle.tilt + particle.diameter / 2;
+			if (confetti.gradient) {
+				var gradient = context.createLinearGradient(x, particle.y, x2, y2);
+				gradient.addColorStop("0", particle.color);
+				gradient.addColorStop("1.0", particle.color2);
+				context.strokeStyle = gradient;
+			} else
+				context.strokeStyle = particle.color;
+			context.moveTo(x, particle.y);
+			context.lineTo(x2, y2);
+			context.stroke();
+		}
+	}
+
+	function updateParticles() {
+		var width = window.innerWidth;
+		var height = window.innerHeight;
+		var particle;
+		waveAngle += 0.01;
+		for (var i = 0; i < particles.length; i++) {
+			particle = particles[i];
+			if (!streamingConfetti && particle.y < -15)
+				particle.y = height + 100;
+			else {
+				particle.tiltAngle += particle.tiltAngleIncrement;
+				particle.x += Math.sin(waveAngle) - 0.5;
+				particle.y += (Math.cos(waveAngle) + particle.diameter + confetti.speed) * 0.5;
+				particle.tilt = Math.sin(particle.tiltAngle) * 15;
+			}
+			if (particle.x > width + 20 || particle.x < -20 || particle.y > height) {
+				if (streamingConfetti && particles.length <= confetti.maxCount)
+					resetParticle(particle, width, height);
+				else {
+					particles.splice(i, 1);
+					i--;
+				}
+			}
+		}
+	}
+})();
+
+        </script>
+        <!-- }}} Confetti lib -->
         <!-- {{{ Main -->
         <script type="text/javascript">window.addEventListener('load',(()=>{
 
@@ -134,46 +341,26 @@ function doplay(seed, board, solution, state) {
     document.querySelector(".controls button.auto")
             .addEventListener("click", function(event) {
         // Click on Auto
-        const candidates = new Set(Array(9).fill(0).map((_,i)=>i+1));
-        let x0,y0,zone0;
-        [].slice.call(table.querySelector("tbody").rows)
-                .forEach((row,y)=>{
+        const td = document.querySelector(".selected");
+        autoCandidates(table, td);
+        showErrors(table);
+        autosave(seed, board, solution, table);
+    });
+    document.querySelector(".controls button.autoall")
+            .addEventListener("click", function(event) {
+        // Click on Auto
+        [].slice.call(table.querySelector("tbody").rows).forEach((row,y)=>{
             [].slice.call(row.cells).forEach((cell,x)=>{
-                if((" "+cell.className+" ").match(" selected ")) {
-                    x0 = x; y0 = y; 
-                    zone0 = Math.floor(x/3)+3*Math.floor(y/3);
+                const t = cell.querySelector("table");
+                const shown = ("none" != t.style.display);
+                const s = cell.querySelector("span");
+                const empty = s && (s.textContent.trim() == "");
+                if(empty || shown) {
+                    autoCandidates(table, cell);
                 }
             });
         });
-        [].slice.call(table.querySelector("tbody").rows)
-                .forEach((row,y)=>{
-            [].slice.call(row.cells).forEach((cell,x)=>{
-                const t = cell.querySelector("span").textContent;
-                if(t && (+t)) {
-                    const zone = Math.floor(x/3)+3*Math.floor(y/3);
-                    if((x == x0) || (y == y0) || (zone == zone0)) {
-                        candidates.delete(+t);
-                    }
-                }
-            });
-        });
-        const selected = document.querySelector(".selected");
-        if(selected) {
-            const minis = [].slice.call(selected.querySelectorAll("td"));
-            minis.forEach(mini=>{mini.textContent = ""});
-            [...candidates].forEach(digit=>{
-                minis[digit-1].textContent = digit;
-            });
-            const s = document.querySelector(".selected span");
-            if(!(` ${s.className} `.match(/ fixed /))) {
-                // Do nothing if figure is fixed
-                const t = document.querySelector(".selected table");
-                t.style.display = "";
-                s.style.display = "none";
-                s.textContent = "";
-                showErrors(table);
-            }
-        }
+        showErrors(table);
         autosave(seed, board, solution, table);
     });
     [].slice.call(document.querySelectorAll(".figurebuttons button"))
@@ -254,6 +441,46 @@ function doplay(seed, board, solution, state) {
         });
     }
 }
+function autoCandidates(table, td) {
+    let x0,y0,zone0;
+    [].slice.call(table.querySelector("tbody").rows)
+            .forEach((row,y)=>{
+        [].slice.call(row.cells).forEach((cell,x)=>{
+            if(cell == td) {
+                x0 = x; y0 = y; 
+                zone0 = Math.floor(x/3)+3*Math.floor(y/3);
+            }
+        });
+    });
+    const candidates = new Set(Array(9).fill(0).map((_,i)=>i+1));
+    [].slice.call(table.querySelector("tbody").rows)
+            .forEach((row,y)=>{
+        [].slice.call(row.cells).forEach((cell,x)=>{
+            const t = cell.querySelector("span").textContent;
+            if(t && (+t)) {
+                const zone = Math.floor(x/3)+3*Math.floor(y/3);
+                if((x == x0) || (y == y0) || (zone == zone0)) {
+                    candidates.delete(+t);
+                }
+            }
+        });
+    });
+    if(td) {
+        const minis = [].slice.call(td.querySelectorAll("td"));
+        minis.forEach(mini=>{mini.textContent = ""});
+        [...candidates].forEach(digit=>{
+            minis[digit-1].textContent = digit;
+        });
+        const s = td.querySelector("span");
+        if(!(` ${s.className} `.match(/ fixed /))) {
+            // Do nothing if figure is fixed
+            const t = td.querySelector("table");
+            t.style.display = "";
+            s.style.display = "none";
+            s.textContent = "";
+        }
+    }
+}
 function showErrors(table) {
     const tds = [];
     const model = [].slice.call(table.querySelector("tbody").rows).map(tr=>
@@ -272,6 +499,10 @@ function showErrors(table) {
             classed(td, "error", s.has(value));
         }
     });
+    const finished = !(new Set(model).has(0));
+    if(finished) {
+        confetti.start();
+    }
 }
 function autosave(seed, board, solution, table) {
     if(!lsAvail()) return;
@@ -526,6 +757,14 @@ html,body {
     color: #888;
     border: 0 !important;
 }
+
+canvas.confettis {
+  display: block;
+  position: relative;
+  zindex: 1;
+  pointer-events: none;
+}
+
         </style>
         <!-- }}} Style -->
     </head>
@@ -534,6 +773,7 @@ html,body {
             <thead id="status"><tr><td colspan="9">
                 <h2>Initialisation &hellip;</h2>
             </td></tr></thead>
+            <!-- {{{ Empty sudoku board -->
             <tbody>
                 <tr><td></td><td></td><td></td><td></td><td></td>
                     <td></td><td></td><td></td><td></td></tr>
@@ -554,6 +794,7 @@ html,body {
                 <tr><td></td><td></td><td></td><td></td><td></td>
                     <td></td><td></td><td></td><td></td></tr>
             </tbody>
+            <!-- }}} Empty sudoku board -->
             <tfoot><tr><td colspan="9">
                 <nav class="controls"><section class="figurebuttons"
                     ><button>1</button><button>2</button><button>3</button
@@ -562,7 +803,7 @@ html,body {
                     ></section><section
                     ><label>Mini <input type="checkbox" class="mini"/></label
                     ><button class="auto">Auto</button
-                    ><button disabled>Auto-all</button
+                    ><button class="autoall">Auto-all</button
                     ><button class="getsolution">Solution</button
                     ><button class="wipeall">Reset</button
                     ></section
@@ -572,3 +813,4 @@ html,body {
     </body>
 </html>
 <!-- vim: set ts=4 sw=4 sts=4 expandtab foldmethod=marker : -->
+
